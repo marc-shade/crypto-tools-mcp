@@ -1,0 +1,21 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "crypto-tools-mcp"
+version = "0.1.0"
+description = "Cryptographic analysis tools - Caesar cipher, frequency analysis, classical cipher cracking"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+dependencies = [
+    "mcp>=1.0.0",
+    "fastmcp>=0.1.0",
+]
+
+[project.scripts]
+crypto-tools-mcp = "crypto_tools_mcp.server:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/crypto_tools_mcp"]
