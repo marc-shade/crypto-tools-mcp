@@ -8,12 +8,90 @@ Includes Caesar cipher, frequency analysis, Vigenère, XOR, and cipher detection
 
 import json
 import string
+import time
+import secrets
 from collections import Counter
-from typing import Optional
+from pathlib import Path
+from typing import Optional, Dict, Any
 
 from mcp.server.fastmcp import FastMCP
 
 mcp = FastMCP("crypto-tools")
+
+# Audit log for crypto operations (educational tracking)
+AUDIT_LOG_FILE = Path("/tmp/crypto-tools-audit.log")
+
+
+def audit_log(operation: str, details: Dict[str, Any] = None):
+    """Log crypto operations for audit trail."""
+    try:
+        entry = {
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S"),
+            "operation": operation,
+            "details": {k: v for k, v in (details or {}).items() if k != "plaintext" and k != "key"}
+        }
+        with open(AUDIT_LOG_FILE, "a") as f:
+            f.write(json.dumps(entry) + "\n")
+    except Exception:
+        pass
+
+
+def validate_key_strength(key: str, min_length: int = 4) -> tuple[bool, str]:
+    """Validate key meets minimum security requirements."""
+    if len(key) < min_length:
+        return False, f"Key too short (minimum {min_length} characters)"
+    if key.lower() in ["password", "secret", "key", "test", "abc", "123"]:
+        return False, "Key is a common weak password"
+    return True, "Key passes basic validation"
+
+
+def secure_key_clear(key_var: str) -> None:
+    """
+    Securely clear a key from memory (best effort in Python).
+    Note: Python's memory management makes true secure erasure difficult.
+    """
+    try:
+        # Overwrite with random data (best effort)
+        import ctypes
+        if key_var:
+            location = id(key_var)
+            size = len(key_var)
+            ctypes.memset(location, 0, size)
+    except Exception:
+        pass  # Best effort - Python GC will handle eventually
+
+
+class SecureKeyHolder:
+    """Context manager for secure key handling."""
+
+    def __init__(self, key: str):
+        self.key = key
+        self._start_time = time.time()
+
+    def __enter__(self):
+        return self.key
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        # Log operation duration (without key content)
+        duration = time.time() - self._start_time
+        audit_log("key_session_end", {"duration_ms": round(duration * 1000, 2)})
+        # Best effort key clearing
+        secure_key_clear(self.key)
+        self.key = None
+
+
+def generate_secure_key(length: int = 16, charset: str = "alphanumeric") -> str:
+    """Generate a cryptographically secure random key."""
+    if charset == "alphanumeric":
+        alphabet = string.ascii_letters + string.digits
+    elif charset == "hex":
+        alphabet = string.hexdigits[:16]
+    elif charset == "alpha":
+        alphabet = string.ascii_uppercase
+    else:
+        alphabet = string.ascii_letters + string.digits + string.punctuation
+
+    return ''.join(secrets.choice(alphabet) for _ in range(length))
 
 # English letter frequencies (percentage)
 ENGLISH_FREQ = {
@@ -246,13 +324,124 @@ async def rot13(text: str) -> str:
 
 
 @mcp.tool()
-async def vigenere_encrypt(plaintext: str, key: str) -> str:
+async def generate_key(
+    length: int = 16,
+    charset: str = "alphanumeric",
+    purpose: str = "general"
+) -> str:
+    """
+    Generate a cryptographically secure random key.
+
+    Args:
+        length: Key length (8-64 characters)
+        charset: Character set - alphanumeric, hex, alpha, or full
+        purpose: Description of key purpose for audit log
+
+    Returns:
+        JSON with generated key and security info
+    """
+    # Validate length
+    if length < 8:
+        return json.dumps({"success": False, "error": "Key length must be at least 8 characters"})
+    if length > 64:
+        return json.dumps({"success": False, "error": "Key length must be at most 64 characters"})
+
+    key = generate_secure_key(length, charset)
+
+    audit_log("key_generated", {
+        "length": length,
+        "charset": charset,
+        "purpose": purpose
+    })
+
+    return json.dumps({
+        "success": True,
+        "key": key,
+        "length": len(key),
+        "charset": charset,
+        "entropy_bits": round(len(key) * 5.7, 1),  # Approximate for alphanumeric
+        "security_note": "Store this key securely. It will not be logged or stored by this tool.",
+        "recommendations": [
+            "Use a password manager to store this key",
+            "Never share keys over insecure channels",
+            "Rotate keys regularly for production use"
+        ]
+    }, indent=2)
+
+
+@mcp.tool()
+async def validate_key(key: str, algorithm: str = "vigenere") -> str:
+    """
+    Validate a key's strength for the specified algorithm.
+
+    Args:
+        key: Key to validate
+        algorithm: Target algorithm (caesar, vigenere, xor)
+
+    Returns:
+        JSON with validation results and recommendations
+    """
+    issues = []
+    recommendations = []
+
+    # Length checks by algorithm
+    min_lengths = {"caesar": 1, "vigenere": 4, "xor": 8}
+    min_len = min_lengths.get(algorithm, 4)
+
+    if len(key) < min_len:
+        issues.append(f"Key too short for {algorithm} (minimum {min_len})")
+        recommendations.append(f"Use at least {min_len} characters")
+
+    # Weak key detection
+    if key.lower() in ["password", "secret", "key", "test", "abc", "123", "aaa", "abc123"]:
+        issues.append("Key is a commonly guessed password")
+        recommendations.append("Use a randomly generated key")
+
+    # Pattern detection
+    if len(set(key)) == 1:
+        issues.append("Key contains only one repeated character")
+        recommendations.append("Use a more varied key")
+
+    if key.isdigit():
+        issues.append("Key contains only digits")
+        recommendations.append("Include letters for stronger security")
+
+    # Entropy estimate
+    charset_size = len(set(key))
+    entropy = len(key) * (charset_size.bit_length() if charset_size > 0 else 0)
+
+    strength = "strong"
+    if issues:
+        strength = "weak" if len(issues) > 1 else "moderate"
+
+    audit_log("key_validated", {
+        "algorithm": algorithm,
+        "strength": strength,
+        "issues_found": len(issues)
+    })
+
+    return json.dumps({
+        "success": True,
+        "algorithm": algorithm,
+        "key_length": len(key),
+        "unique_characters": charset_size,
+        "estimated_entropy_bits": entropy,
+        "strength": strength,
+        "issues": issues,
+        "recommendations": recommendations if recommendations else ["Key appears sufficiently strong"],
+        "passed": len(issues) == 0
+    }, indent=2)
+
+
+@mcp.tool()
+async def vigenere_encrypt(plaintext: str, key: str, validate: bool = True) -> str:
     """
     Encrypt plaintext using Vigenère cipher.
 
     Args:
         plaintext: Text to encrypt
         key: Encryption key (letters only)
+        validate: Whether to validate key strength (default: True)
 
     Returns:
         JSON with encrypted ciphertext
@@ -260,6 +449,15 @@ async def vigenere_encrypt(plaintext: str, key: str) -> str:
     key = ''.join(c.upper() for c in key if c.isalpha())
     if not key:
         return json.dumps({"success": False, "error": "Key must contain letters"})
+
+    # Key validation
+    key_warning = None
+    if validate:
+        is_valid, msg = validate_key_strength(key)
+        if not is_valid:
+            key_warning = msg
+
+    audit_log("vigenere_encrypt", {"key_length": len(key)})
 
     result = []
     key_index = 0
@@ -272,14 +470,18 @@ async def vigenere_encrypt(plaintext: str, key: str) -> str:
         else:
             result.append(char)
 
-    return json.dumps({
+    response = {
         "success": True,
         "plaintext": plaintext,
         "ciphertext": ''.join(result),
         "key": key,
         "key_length": len(key),
         "method": "Vigenère cipher"
-    }, indent=2)
+    }
+    if key_warning:
+        response["security_warning"] = key_warning
+
+    return json.dumps(response, indent=2)
 
 
 @mcp.tool()
