@@ -10,10 +10,15 @@ References:
 - NIST SP 800-53 Rev 5: SC-12, SC-17, SC-28
 """
 
+import json
+import logging
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 from enum import Enum
+from pathlib import Path
 from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 
 class KeyState(Enum):
@@ -246,8 +251,17 @@ class KeyLifecycleManager:
         },
     ]
 
-    def __init__(self) -> None:
+    def __init__(self, storage_path: Optional[str] = None) -> None:
         self._keys: dict[str, KeyRecord] = {}
+        self._storage_path: Optional[Path] = Path(storage_path) if storage_path else None
+        if self._storage_path:
+            self._load_state()
+        else:
+            logger.warning(
+                "KeyLifecycleManager running without persistence. "
+                "Key state will be lost on restart. "
+                "Pass storage_path to enable persistent state."
+            )
 
     def create_key(
         self,
@@ -308,6 +322,7 @@ class KeyLifecycleManager:
         )
 
         self._keys[key_id] = record
+        self._save_state()
 
         return {
             "success": True,
@@ -367,6 +382,8 @@ class KeyLifecycleManager:
             record.compromised_at = now
         elif target in (KeyState.DESTROYED, KeyState.DESTROYED_COMPROMISED):
             record.destroyed_at = now
+
+        self._save_state()
 
         return {
             "success": True,
@@ -843,6 +860,69 @@ class KeyLifecycleManager:
                 "Key compromise response procedures",
             ],
         }
+
+    def _save_state(self) -> None:
+        """Persist key state to storage file if storage_path is configured."""
+        if not self._storage_path:
+            return
+        try:
+            data = {}
+            for key_id, record in self._keys.items():
+                rec = {
+                    "key_id": record.key_id,
+                    "name": record.name,
+                    "key_type": record.key_type.value,
+                    "algorithm": record.algorithm,
+                    "key_length_bits": record.key_length_bits,
+                    "state": record.state.value,
+                    "created_at": record.created_at,
+                    "activated_at": record.activated_at,
+                    "deactivated_at": record.deactivated_at,
+                    "compromised_at": record.compromised_at,
+                    "destroyed_at": record.destroyed_at,
+                    "expires_at": record.expires_at,
+                    "owner": record.owner,
+                    "location": record.location,
+                    "purpose": record.purpose,
+                    "rotation_schedule": record.rotation_schedule,
+                    "metadata": record.metadata,
+                }
+                data[key_id] = rec
+            self._storage_path.parent.mkdir(parents=True, exist_ok=True)
+            self._storage_path.write_text(json.dumps(data, indent=2))
+        except Exception as e:
+            logger.error("Failed to save key lifecycle state: %s", e)
+
+    def _load_state(self) -> None:
+        """Load key state from storage file if it exists."""
+        if not self._storage_path or not self._storage_path.exists():
+            return
+        try:
+            data = json.loads(self._storage_path.read_text())
+            for key_id, rec in data.items():
+                record = KeyRecord(
+                    key_id=rec["key_id"],
+                    name=rec["name"],
+                    key_type=self._resolve_key_type(rec["key_type"]),
+                    algorithm=rec["algorithm"],
+                    key_length_bits=rec["key_length_bits"],
+                    state=KeyState(rec["state"]),
+                    created_at=rec["created_at"],
+                    activated_at=rec.get("activated_at"),
+                    deactivated_at=rec.get("deactivated_at"),
+                    compromised_at=rec.get("compromised_at"),
+                    destroyed_at=rec.get("destroyed_at"),
+                    expires_at=rec.get("expires_at"),
+                    owner=rec.get("owner", ""),
+                    location=rec.get("location", ""),
+                    purpose=rec.get("purpose", ""),
+                    rotation_schedule=rec.get("rotation_schedule", ""),
+                    metadata=rec.get("metadata", {}),
+                )
+                self._keys[key_id] = record
+            logger.info("Loaded %d keys from %s", len(self._keys), self._storage_path)
+        except Exception as e:
+            logger.error("Failed to load key lifecycle state: %s", e)
 
     def _resolve_key_type(self, key_type_str: str) -> KeyType:
         """Resolve string to KeyType enum."""

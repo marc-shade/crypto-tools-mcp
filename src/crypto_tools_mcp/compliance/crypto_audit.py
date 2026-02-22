@@ -268,9 +268,9 @@ class CryptoAuditEngine:
             name="CBC Mode Without Authentication",
             description="CBC without HMAC is vulnerable to padding oracle attacks (POODLE, Lucky13)",
             patterns=[
-                r"""\bCBC\b(?!.*(?:HMAC|hmac|MAC|mac|tag|authenticate))""",
+                r"""(?:MODE_CBC|AES\.MODE_CBC|\.new\(.*\bCBC\b|AES/CBC)(?!.*(?:HMAC|hmac|MAC|mac|tag|authenticate))""",
                 r"""AES/CBC/PKCS[57]Padding""",
-                r"""\bMODE_CBC\b""",
+                r"""(?:createCipher(?:iv)?|Cipher\.getInstance)\s*\(.*\bcbc\b""",
             ],
             severity=Severity.MEDIUM,
             cwe_ids=["CWE-327"],
@@ -407,7 +407,7 @@ class CryptoAuditEngine:
                 r"""iv\s*=\s*(?:\\x00+|['"]{2}|b['"]{2})""",
             ],
             severity=Severity.HIGH,
-            cwe_ids=["CWE-329"],
+            cwe_ids=["CWE-1204"],
             remediation="Generate a unique random IV/nonce for each encryption operation "
                         "using os.urandom() or secrets.token_bytes(). Never reuse IVs with "
                         "the same key, especially in CTR or GCM mode.",
@@ -529,7 +529,7 @@ class CryptoAuditEngine:
                 "CWE-326": "Inadequate Encryption Strength",
                 "CWE-327": "Use of a Broken or Risky Cryptographic Algorithm",
                 "CWE-328": "Use of Weak Hash",
-                "CWE-329": "Generation of Predictable IV with CBC Mode",
+                "CWE-1204": "Generation of Weak Initialization Vector (IV)",
                 "CWE-330": "Use of Insufficiently Random Values",
                 "CWE-338": "Use of Cryptographically Weak PRNG",
                 "CWE-757": "Selection of Less-Secure Algorithm During Negotiation",

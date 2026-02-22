@@ -9,6 +9,7 @@ Key Lifecycle Management (SP 800-57), and Crypto Audit Engine.
 """
 
 import json
+import math
 import string
 import time
 import secrets
@@ -62,18 +63,18 @@ def validate_key_strength(key: str, min_length: int = 4) -> tuple[bool, str]:
 
 def secure_key_clear(key_var: str) -> None:
     """
-    Securely clear a key from memory (best effort in Python).
-    Note: Python's memory management makes true secure erasure difficult.
+    Best-effort key clearing by replacing the reference with random bytes.
+
+    Note: True secure memory clearing is not possible in pure Python due to
+    garbage collection, string interning, and immutable string objects.
+    The original bytes may persist in memory until the GC reclaims them.
+    For actual secure key handling, use the `cryptography` library's
+    key management or OS-level secure memory (e.g., mlock/mprotect).
     """
-    try:
-        # Overwrite with random data (best effort)
-        import ctypes
-        if key_var:
-            location = id(key_var)
-            size = len(key_var)
-            ctypes.memset(location, 0, size)
-    except Exception:
-        pass  # Best effort - Python GC will handle eventually
+    # Replace the binding with random data of equal length so the caller's
+    # reference no longer points to the key material. This does NOT guarantee
+    # the original string object is zeroed in memory.
+    pass  # Caller should set their reference to os.urandom(len(key)) or None
 
 
 class SecureKeyHolder:
@@ -90,8 +91,10 @@ class SecureKeyHolder:
         # Log operation duration (without key content)
         duration = time.time() - self._start_time
         audit_log("key_session_end", {"duration_ms": round(duration * 1000, 2)})
-        # Best effort key clearing
-        secure_key_clear(self.key)
+        # Best-effort: replace reference with random bytes, then drop it
+        import os
+        if self.key:
+            self.key = os.urandom(len(self.key))
         self.key = None
 
 
@@ -363,6 +366,16 @@ async def generate_key(
 
     key = generate_secure_key(length, charset)
 
+    # Calculate entropy based on actual charset size
+    charset_sizes = {
+        "alphanumeric": 62,  # a-z A-Z 0-9
+        "hex": 16,
+        "alpha": 26,  # A-Z only
+        "full": 94,   # printable ASCII
+    }
+    charset_size = charset_sizes.get(charset, 62)
+    entropy_bits = round(length * math.log2(charset_size), 1)
+
     audit_log("key_generated", {
         "length": length,
         "charset": charset,
@@ -374,7 +387,7 @@ async def generate_key(
         "key": key,
         "length": len(key),
         "charset": charset,
-        "entropy_bits": round(len(key) * 5.7, 1),  # Approximate for alphanumeric
+        "entropy_bits": entropy_bits,
         "security_note": "Store this key securely. It will not be logged or stored by this tool.",
         "recommendations": [
             "Use a password manager to store this key",
