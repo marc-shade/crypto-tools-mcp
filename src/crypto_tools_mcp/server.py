@@ -2,8 +2,10 @@
 """
 Crypto Tools MCP Server
 
-Classical cryptography analysis tools for CTF challenges and security education.
-Includes Caesar cipher, frequency analysis, Vigenère, XOR, and cipher detection.
+Defense-grade cryptographic analysis and compliance tools.
+Classical cryptography (Caesar, Vigenere, XOR, frequency analysis) plus
+FIPS 140-3, CNSA 2.0, Post-Quantum Cryptography (FIPS 203/204/205),
+Key Lifecycle Management (SP 800-57), and Crypto Audit Engine.
 """
 
 import json
@@ -16,7 +18,20 @@ from typing import Optional, Dict, Any
 
 from mcp.server.fastmcp import FastMCP
 
+from crypto_tools_mcp.compliance.fips_validator import FIPSValidator
+from crypto_tools_mcp.compliance.cnsa_analyzer import CNSAAnalyzer
+from crypto_tools_mcp.compliance.pqc_readiness import PQCReadinessAssessor
+from crypto_tools_mcp.compliance.key_lifecycle import KeyLifecycleManager
+from crypto_tools_mcp.compliance.crypto_audit import CryptoAuditEngine
+
 mcp = FastMCP("crypto-tools")
+
+# Compliance engine singletons
+_fips_validator = FIPSValidator()
+_cnsa_analyzer = CNSAAnalyzer()
+_pqc_assessor = PQCReadinessAssessor()
+_key_lifecycle = KeyLifecycleManager()
+_crypto_audit = CryptoAuditEngine()
 
 # Audit log for crypto operations (educational tracking)
 AUDIT_LOG_FILE = Path("/tmp/crypto-tools-audit.log")
@@ -689,6 +704,423 @@ async def brute_force_xor(ciphertext_hex: str, max_key_length: int = 4) -> str:
         "top_results": results[:10],
         "note": "Results sorted by English word count"
     }, indent=2)
+
+
+# =============================================================================
+# Defense-Grade Cryptographic Compliance Tools
+# =============================================================================
+
+
+@mcp.tool()
+async def check_fips_compliance(
+    algorithms: str,
+    scan_text: str = "",
+) -> str:
+    """
+    Validate cryptographic algorithms against FIPS 140-3 approved list.
+
+    Checks algorithm compliance, key lengths, security strength per
+    SP 800-57, and maps findings to NIST 800-53 controls (SC-12, SC-13).
+
+    Args:
+        algorithms: Comma-separated list of algorithm names (e.g. "AES-256,SHA-384,RSA-2048,MD5")
+        scan_text: Optional source code or config text to scan for algorithm usage
+
+    Returns:
+        JSON FIPS 140-3 compliance report with pass/fail per algorithm
+    """
+    algo_list = [a.strip() for a in algorithms.split(",") if a.strip()]
+
+    if not algo_list and not scan_text:
+        return json.dumps({
+            "success": False,
+            "error": "Provide algorithm names (comma-separated) or text to scan"
+        })
+
+    include_scan = bool(scan_text)
+
+    if algo_list:
+        report = _fips_validator.generate_compliance_report(
+            algo_list, include_scan=include_scan, scan_text=scan_text
+        )
+    else:
+        report = _fips_validator.scan_text_for_algorithms(scan_text)
+
+    report["success"] = True
+    audit_log("fips_compliance_check", {
+        "algorithms_checked": len(algo_list),
+        "scan_performed": include_scan,
+        "status": report.get("overall_compliance", report.get("overall_status", "unknown")),
+    })
+
+    return json.dumps(report, indent=2)
+
+
+@mcp.tool()
+async def analyze_cnsa_compliance(
+    algorithms: str,
+    include_gap_analysis: bool = True,
+    scan_text: str = "",
+) -> str:
+    """
+    Check NSA CNSA 2.0 readiness for National Security Systems.
+
+    Analyzes algorithms against CNSA 2.0 requirements (AES-256, SHA-384,
+    ML-KEM-1024, ML-DSA-87), tracks transition timeline, and assesses
+    crypto agility.
+
+    Args:
+        algorithms: Comma-separated algorithm names (e.g. "AES-256,ECDSA-P384,SHA-256")
+        include_gap_analysis: Include full gap analysis with migration roadmap (default True)
+        scan_text: Optional source code or config text to scan
+
+    Returns:
+        JSON CNSA 2.0 compliance analysis with gap assessment
+    """
+    algo_list = [a.strip() for a in algorithms.split(",") if a.strip()]
+
+    if not algo_list and not scan_text:
+        return json.dumps({
+            "success": False,
+            "error": "Provide algorithm names (comma-separated) or text to scan"
+        })
+
+    result = {}
+
+    if algo_list and include_gap_analysis:
+        result = _cnsa_analyzer.generate_gap_analysis(algo_list)
+    elif algo_list:
+        result = _cnsa_analyzer.analyze_multiple(algo_list)
+
+    if scan_text:
+        scan_result = _cnsa_analyzer.scan_text(scan_text)
+        if result:
+            result["code_scan"] = scan_result
+        else:
+            result = scan_result
+
+    result["success"] = True
+
+    audit_log("cnsa_compliance_check", {
+        "algorithms_checked": len(algo_list),
+        "gap_analysis": include_gap_analysis,
+        "status": result.get("overall_compliance", result.get("overall_status", "unknown")),
+    })
+
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+async def assess_pqc_readiness(
+    algorithms: str,
+    data_sensitivity: str = "high",
+    data_shelf_life_years: int = 10,
+    system_type: str = "general",
+    include_hndl: bool = True,
+    include_roadmap: bool = True,
+) -> str:
+    """
+    Assess post-quantum cryptography readiness per FIPS 203/204/205.
+
+    Evaluates quantum vulnerability of current algorithms, calculates
+    quantum risk scores, assesses Harvest-Now-Decrypt-Later threats,
+    and generates PQC migration roadmaps.
+
+    Args:
+        algorithms: Comma-separated algorithm names (e.g. "RSA-2048,ECDSA-P256,AES-256")
+        data_sensitivity: Data sensitivity level - "low", "medium", "high", or "critical"
+        data_shelf_life_years: How many years data must remain confidential
+        system_type: System type - "nss" (National Security), "federal", or "general"
+        include_hndl: Include Harvest-Now-Decrypt-Later assessment (default True)
+        include_roadmap: Include migration roadmap (default True)
+
+    Returns:
+        JSON post-quantum readiness assessment with risk scores and migration plan
+    """
+    algo_list = [a.strip() for a in algorithms.split(",") if a.strip()]
+
+    if not algo_list:
+        return json.dumps({
+            "success": False,
+            "error": "Provide algorithm names (comma-separated)"
+        })
+
+    result = _pqc_assessor.assess_multiple(algo_list)
+
+    if include_hndl:
+        result["hndl_assessment"] = _pqc_assessor.hndl_threat_assessment(
+            algo_list, data_sensitivity, data_shelf_life_years
+        )
+
+    if include_roadmap:
+        result["migration_roadmap"] = _pqc_assessor.generate_migration_roadmap(
+            algo_list, system_type
+        )
+
+    result["hybrid_recommendations"] = _pqc_assessor.hybrid_mode_recommendations(algo_list)
+    result["success"] = True
+
+    audit_log("pqc_readiness_assessment", {
+        "algorithms_checked": len(algo_list),
+        "overall_risk": result.get("overall_quantum_risk", "unknown"),
+        "system_type": system_type,
+    })
+
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+async def manage_key_lifecycle(
+    action: str,
+    key_id: str = "",
+    name: str = "",
+    key_type: str = "symmetric_encryption",
+    algorithm: str = "AES-256",
+    key_length_bits: int = 256,
+    new_state: str = "",
+    reason: str = "",
+    owner: str = "",
+    location: str = "",
+    purpose: str = "",
+    practice_description: str = "",
+) -> str:
+    """
+    Manage cryptographic key lifecycle per NIST SP 800-57.
+
+    Actions: create, transition, check, inventory, rotation, policies, destroy_guidance, report, validate_practice
+
+    Args:
+        action: Action to perform - "create", "transition", "check", "inventory",
+                "rotation", "policies", "destroy_guidance", "report", "validate_practice"
+        key_id: Key identifier (required for create, transition, check)
+        name: Human-readable key name (for create)
+        key_type: Key type e.g. "symmetric_encryption", "tls_key", "api_key" (for create)
+        algorithm: Algorithm e.g. "AES-256", "RSA-4096" (for create)
+        key_length_bits: Key length in bits (for create)
+        new_state: Target state for transition - "active", "deactivated", "compromised", "destroyed"
+        reason: Reason for state transition
+        owner: Key owner/custodian
+        location: Key storage location (e.g. "HSM", "AWS KMS")
+        purpose: Key purpose description
+        practice_description: Text description of key management practices (for validate_practice)
+
+    Returns:
+        JSON key lifecycle management result
+    """
+    action = action.lower().strip()
+
+    if action == "create":
+        if not key_id or not name:
+            return json.dumps({"success": False, "error": "key_id and name required for create"})
+        result = _key_lifecycle.create_key(
+            key_id=key_id, name=name, key_type=key_type, algorithm=algorithm,
+            key_length_bits=key_length_bits, owner=owner, location=location, purpose=purpose,
+        )
+    elif action == "transition":
+        if not key_id or not new_state:
+            return json.dumps({"success": False, "error": "key_id and new_state required for transition"})
+        result = _key_lifecycle.transition_key(key_id, new_state, reason)
+    elif action == "check":
+        if not key_id:
+            return json.dumps({"success": False, "error": "key_id required for check"})
+        result = _key_lifecycle.check_key_compliance(key_id)
+    elif action == "inventory":
+        result = _key_lifecycle.get_key_inventory()
+    elif action == "rotation":
+        result = _key_lifecycle.check_rotation_schedule()
+    elif action == "policies":
+        result = _key_lifecycle.get_cryptoperiod_policies()
+    elif action == "destroy_guidance":
+        result = _key_lifecycle.get_destruction_guidance(key_type)
+    elif action == "report":
+        result = _key_lifecycle.generate_lifecycle_report()
+    elif action == "validate_practice":
+        if not practice_description:
+            return json.dumps({"success": False, "error": "practice_description required"})
+        result = _key_lifecycle.validate_key_management_practice(practice_description)
+    else:
+        return json.dumps({
+            "success": False,
+            "error": f"Unknown action: {action}",
+            "valid_actions": [
+                "create", "transition", "check", "inventory",
+                "rotation", "policies", "destroy_guidance", "report", "validate_practice",
+            ],
+        })
+
+    result["success"] = True
+    audit_log("key_lifecycle", {"action": action, "key_id": key_id or "N/A"})
+
+    return json.dumps(result, indent=2, default=str)
+
+
+@mcp.tool()
+async def audit_crypto_usage(
+    text: str,
+    output_format: str = "json",
+) -> str:
+    """
+    Scan text or code for cryptographic security issues.
+
+    Detects hardcoded keys, weak algorithms, insecure modes (ECB),
+    missing key derivation, disabled certificate validation, insecure
+    TLS versions, and more. Maps findings to CWE IDs.
+
+    Args:
+        text: Source code, configuration, or documentation text to audit
+        output_format: Output format - "json" (default) or "sarif" for CI/CD integration
+
+    Returns:
+        JSON audit report with findings, CWE mappings, and remediation
+    """
+    if not text.strip():
+        return json.dumps({"success": False, "error": "No text provided for audit"})
+
+    result = _crypto_audit.scan_text(text)
+
+    if output_format.lower() == "sarif":
+        sarif = _crypto_audit.to_sarif(result)
+        sarif["success"] = True
+        audit_log("crypto_audit", {
+            "format": "sarif",
+            "findings": result["total_findings"],
+            "risk": result["overall_risk"],
+        })
+        return json.dumps(sarif, indent=2)
+
+    result["success"] = True
+    audit_log("crypto_audit", {
+        "format": "json",
+        "findings": result["total_findings"],
+        "risk": result["overall_risk"],
+    })
+
+    return json.dumps(result, indent=2)
+
+
+@mcp.tool()
+async def generate_compliance_report(
+    algorithms: str,
+    scan_text: str = "",
+    system_type: str = "general",
+    data_sensitivity: str = "high",
+    data_shelf_life_years: int = 10,
+) -> str:
+    """
+    Generate comprehensive cryptographic compliance report covering
+    FIPS 140-3, CNSA 2.0, post-quantum readiness, and code audit.
+
+    Produces a unified report suitable for security assessments,
+    compliance audits, and migration planning.
+
+    Args:
+        algorithms: Comma-separated algorithm names to evaluate
+        scan_text: Optional source code or config text to audit
+        system_type: System type - "nss", "federal", or "general"
+        data_sensitivity: Data sensitivity - "low", "medium", "high", or "critical"
+        data_shelf_life_years: How many years data must remain confidential
+
+    Returns:
+        JSON comprehensive compliance report across all standards
+    """
+    algo_list = [a.strip() for a in algorithms.split(",") if a.strip()]
+
+    if not algo_list and not scan_text:
+        return json.dumps({
+            "success": False,
+            "error": "Provide algorithm names and/or text to scan"
+        })
+
+    report = {
+        "report_type": "Comprehensive Cryptographic Compliance Report",
+        "generated_at": time.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "system_type": system_type,
+        "standards_evaluated": [
+            "FIPS 140-3",
+            "NIST SP 800-131A Rev 2",
+            "NIST SP 800-57 Part 1 Rev 5",
+            "NSA CNSA 2.0",
+            "NIST FIPS 203 (ML-KEM)",
+            "NIST FIPS 204 (ML-DSA)",
+            "NIST FIPS 205 (SLH-DSA)",
+            "OMB M-23-02 (PQC Migration)",
+        ],
+    }
+
+    if algo_list:
+        # FIPS 140-3
+        report["fips_140_3"] = _fips_validator.generate_compliance_report(
+            algo_list, include_scan=bool(scan_text), scan_text=scan_text
+        )
+
+        # CNSA 2.0
+        report["cnsa_2_0"] = _cnsa_analyzer.generate_gap_analysis(algo_list)
+
+        # Post-Quantum Readiness
+        pqc = _pqc_assessor.assess_multiple(algo_list)
+        pqc["hndl_assessment"] = _pqc_assessor.hndl_threat_assessment(
+            algo_list, data_sensitivity, data_shelf_life_years
+        )
+        pqc["migration_roadmap"] = _pqc_assessor.generate_migration_roadmap(
+            algo_list, system_type
+        )
+        report["post_quantum"] = pqc
+
+    # Code Audit
+    if scan_text:
+        report["code_audit"] = _crypto_audit.scan_text(scan_text)
+
+    # Overall compliance determination
+    statuses = []
+    if "fips_140_3" in report:
+        statuses.append(report["fips_140_3"].get("overall_compliance", "UNKNOWN"))
+    if "cnsa_2_0" in report:
+        statuses.append(report["cnsa_2_0"].get("overall_compliance", "UNKNOWN"))
+    if "code_audit" in report:
+        risk = report["code_audit"].get("overall_risk", "UNKNOWN")
+        statuses.append("NON_COMPLIANT" if risk in ("CRITICAL", "HIGH") else "COMPLIANT")
+
+    if "NON_COMPLIANT" in statuses:
+        overall = "NON_COMPLIANT"
+    elif any("WARNING" in s for s in statuses):
+        overall = "COMPLIANT_WITH_WARNINGS"
+    elif all(s == "COMPLIANT" for s in statuses):
+        overall = "COMPLIANT"
+    else:
+        overall = "REVIEW_REQUIRED"
+
+    report["overall_compliance"] = overall
+
+    # Executive summary
+    summaries = []
+    if "fips_140_3" in report:
+        fips_sum = report["fips_140_3"].get("algorithm_validation", {}).get("summary", {})
+        summaries.append(
+            f"FIPS 140-3: {fips_sum.get('passed', 0)} passed, "
+            f"{fips_sum.get('failed', 0)} failed, "
+            f"{fips_sum.get('warnings', 0)} warnings."
+        )
+    if "cnsa_2_0" in report:
+        cnsa_status = report["cnsa_2_0"].get("overall_compliance", "unknown")
+        summaries.append(f"CNSA 2.0: {cnsa_status}.")
+    if "post_quantum" in report:
+        pq_risk = report["post_quantum"].get("overall_quantum_risk", "unknown")
+        summaries.append(f"Quantum Risk: {pq_risk}.")
+    if "code_audit" in report:
+        audit_risk = report["code_audit"].get("overall_risk", "unknown")
+        findings = report["code_audit"].get("total_findings", 0)
+        summaries.append(f"Code Audit: {findings} findings, risk level {audit_risk}.")
+
+    report["executive_summary"] = " ".join(summaries)
+    report["success"] = True
+
+    audit_log("full_compliance_report", {
+        "algorithms": len(algo_list),
+        "scan_performed": bool(scan_text),
+        "overall": overall,
+    })
+
+    return json.dumps(report, indent=2, default=str)
 
 
 def main():

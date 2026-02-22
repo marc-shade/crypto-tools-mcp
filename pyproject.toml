@@ -4,11 +4,25 @@ build-backend = "hatchling.build"
 
 [project]
 name = "crypto-tools-mcp"
-version = "0.1.0"
-description = "Cryptographic analysis tools - Caesar cipher, frequency analysis, classical cipher cracking"
+version = "0.2.0"
+description = "Defense-grade cryptographic compliance tools - FIPS 140-3, CNSA 2.0, Post-Quantum (FIPS 203/204/205), Key Lifecycle (SP 800-57), and Crypto Audit Engine"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
+keywords = [
+    "cryptography",
+    "compliance",
+    "fips-140-3",
+    "cnsa",
+    "post-quantum",
+    "pqc",
+    "nist",
+    "mcp",
+    "security",
+    "audit",
+    "key-management",
+    "defense",
+]
 dependencies = [
     "mcp>=1.0.0",
     "fastmcp>=0.1.0",
