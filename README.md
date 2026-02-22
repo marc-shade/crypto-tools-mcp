@@ -1,3 +1,5 @@
+![crypto_tools_mcp](https://github.com/user-attachments/assets/9f39e2bc-de67-4c7d-b0ca-6c96da9bb360)
+
 # Crypto Tools MCP Server
 
 [![MCP](https://img.shields.io/badge/MCP-Compatible-blue)](https://modelcontextprotocol.io)
