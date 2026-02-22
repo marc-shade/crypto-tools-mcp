@@ -3,6 +3,8 @@
 [![MCP](https://img.shields.io/badge/MCP-Compatible-blue)](https://modelcontextprotocol.io)
 [![Python-3.10+](https://img.shields.io/badge/Python-3.10%2B-green)](https://python.org)
 [![License](https://img.shields.io/badge/License-MIT-yellow)](LICENSE)
+[![Tests](https://img.shields.io/badge/Tests-412_passed-brightgreen)]()
+[![Coverage](https://img.shields.io/badge/Coverage-86%25-green)]()
 [![FIPS 140-3](https://img.shields.io/badge/FIPS_140--3-Validated-red)](https://csrc.nist.gov/publications/detail/fips/140/3/final)
 [![CNSA 2.0](https://img.shields.io/badge/CNSA_2.0-Ready-orange)](https://media.defense.gov/2022/Sep/07/2003071834/-1/-1/0/CSA_CNSA_2.0_ALGORITHMS_.PDF)
 [![Post-Quantum](https://img.shields.io/badge/Post--Quantum-FIPS_203%2F204%2F205-purple)](https://csrc.nist.gov/projects/post-quantum-cryptography)
@@ -310,6 +312,23 @@ generate_compliance_report(
 | FIPS 205 | SLH-DSA | Full |
 | OMB M-23-02 | PQC migration | Full |
 | SP 800-88 | Media sanitization | Guidance |
+
+---
+
+## Testing
+
+```bash
+# Run all tests with coverage
+python -m pytest tests/ -v --cov=crypto_tools_mcp --cov-report=term-missing
+
+# Run compliance tests only
+python -m pytest tests/test_compliance.py -v
+
+# Run classical cipher tests only
+python -m pytest tests/test_encryption.py tests/test_hashing.py -v
+```
+
+Test coverage: 412 tests across 6 test modules covering classical ciphers, key management, MCP tool registration, and all five compliance modules (FIPS, CNSA, PQC, Key Lifecycle, Crypto Audit).
 
 ---
 

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "crypto-tools-mcp"
-version = "0.2.0"
+version = "0.3.0"
 description = "Defense-grade cryptographic compliance tools - FIPS 140-3, CNSA 2.0, Post-Quantum (FIPS 203/204/205), Key Lifecycle (SP 800-57), and Crypto Audit Engine"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -25,7 +25,6 @@ keywords = [
 ]
 dependencies = [
     "mcp>=1.0.0",
-    "fastmcp>=0.1.0",
 ]
 
 [project.scripts]
@@ -33,3 +32,14 @@ crypto-tools-mcp = "crypto_tools_mcp.server:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/crypto_tools_mcp"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]

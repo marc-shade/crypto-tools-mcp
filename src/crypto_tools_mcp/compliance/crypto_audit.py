@@ -666,7 +666,7 @@ class CryptoAuditEngine:
                     "tool": {
                         "driver": {
                             "name": "crypto-tools-mcp-audit",
-                            "version": "0.2.0",
+                            "version": "0.3.0",
                             "informationUri": "https://github.com/marc-shade/crypto-tools-mcp",
                             "rules": rules,
                         },

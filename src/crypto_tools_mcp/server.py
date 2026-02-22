@@ -63,18 +63,18 @@ def validate_key_strength(key: str, min_length: int = 4) -> tuple[bool, str]:
 
 def secure_key_clear(key_var: str) -> None:
     """
-    Best-effort key clearing by replacing the reference with random bytes.
+    Placeholder documenting the limitation of key clearing in Python.
 
-    Note: True secure memory clearing is not possible in pure Python due to
+    True secure memory clearing is not possible in pure Python due to
     garbage collection, string interning, and immutable string objects.
-    The original bytes may persist in memory until the GC reclaims them.
-    For actual secure key handling, use the `cryptography` library's
-    key management or OS-level secure memory (e.g., mlock/mprotect).
+    For production key handling, use:
+    - The ``cryptography`` library's key management
+    - OS-level secure memory (e.g., mlock/mprotect)
+    - Hardware Security Modules (HSM) via PKCS#11
+
+    Callers should set their reference to ``os.urandom(len(key))`` or ``None``
+    after use to drop the reference to the original key material.
     """
-    # Replace the binding with random data of equal length so the caller's
-    # reference no longer points to the key material. This does NOT guarantee
-    # the original string object is zeroed in memory.
-    pass  # Caller should set their reference to os.urandom(len(key)) or None
 
 
 class SecureKeyHolder:
